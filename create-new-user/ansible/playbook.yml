@@ -1,0 +1,14 @@
+- name: ActiveDirectory
+  hosts: ActiveDirectory
+  become: false
+  gather_facts: false
+  roles:
+    - create_ad_user
+- name: VPN
+  hosts: vpn_server
+  roles:
+    - create_vpn_user
+- name: EJBCA Dot1X
+  hosts: ejbca_dot1x
+  roles:
+    - create_dot1x_user

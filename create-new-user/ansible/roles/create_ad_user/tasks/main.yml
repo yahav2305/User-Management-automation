@@ -1,0 +1,38 @@
+- name: Check if user already exists
+  microsoft.ad.object_info:
+    identity: "CN={{ lookup('ansible.builtin.env', 'username') }},OU=Users,DC=network,DC=internal"
+  register: create_ad_user_user_exists_result
+
+- name: Create file to notify that user already exists
+  ansible.builtin.file:
+    path: "./ad-already-exists"
+    state: touch
+    mode: '644'
+  when: create_ad_user_user_exists_result.objects | length > 0
+  delegate_to: localhost
+
+- name: Print that user already exists and that role is ending early
+  ansible.builtin.debug:
+    msg: User {{ lookup('ansible.builtin.env', 'username') }} already exists in the Active Directory instance. Exiting
+  when: create_ad_user_user_exists_result.objects | length > 0
+
+- name: User already exists, exit role
+  ansible.builtin.meta: end_role
+  when: create_ad_user_user_exists_result.objects | length > 0
+
+- name: Add User
+  microsoft.ad.user:
+    firstname: "{{ lookup('ansible.builtin.env', 'username') }}"
+    display_name: "{{ lookup('ansible.builtin.env', 'username') }}"
+    name: "{{ lookup('ansible.builtin.env', 'username') }}"
+    upn: "{{ lookup('ansible.builtin.env', 'username') }}@network.internal"
+    email: "{{ lookup('ansible.builtin.env', 'username') }}@network.internal"
+    description: "{{ lookup('ansible.builtin.env', 'description') }}"
+    password_never_expires: true
+    state: present
+    password: "P@ssword1!!!"
+    path: "OU=Users,DC=network,DC=internal"
+    groups:
+      set:
+        - "Domain Users"
+        - "{{ lookup('ansible.builtin.env', 'group_name') }}"

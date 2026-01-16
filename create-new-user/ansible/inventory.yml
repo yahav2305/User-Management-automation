@@ -1,0 +1,29 @@
+all:
+  children:
+    ungrouped: {}
+    win:
+      hosts:
+        ActiveDirectory:
+          ansible_connection: winrm
+          ansible_host: ad.network.internal
+          ansible_password: "{{ lookup('ansible.builtin.env', 'ad_administrator_password') }}"
+          ansible_port: 5985
+          ansible_user: "{{ lookup('ansible.builtin.env', 'ad_administrator_username') }}"
+          ansible_winrm_server_cert_validation: ignore
+          ansible_winrm_transport: ntlm
+    linux:
+      hosts:
+        vpn_server:
+          ansible_host: <vpn-server-ip>
+          ansible_user: user
+          ansible_password: "{{ lookup('ansible.builtin.env', 'vpn_user_password') }}"
+          ansible_become: true
+          ansible_become_method: su
+          ansible_become_pass: "{{ lookup('ansible.builtin.env', 'vpn_root_password') }}"
+        ejbca_dot1x:
+          ansible_host: <ejbca-dot1x-server-ip>
+          ansible_user: user
+          ansible_password: "{{ lookup('ansible.builtin.env', 'ejbca_dot1x_user_password') }}"
+          ansible_become: true
+          ansible_become_method: su
+          ansible_become_pass: "{{ lookup('ansible.builtin.env', 'ejbca_dot1x_root_password') }}"

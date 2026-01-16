@@ -1,0 +1,25 @@
+- name: Check if user already exists
+  community.docker.docker_container_exec:
+    container: "{{ delete_vpn_user_container }}"
+    command: |
+      /usr/local/openvpn_as/scripts/sacli --pfilt {{ lookup('ansible.builtin.env', 'username') }} UserPropGet
+  register: delete_vpn_user_user_exists_result
+
+- name: Print that user doesn't exist and that role is ending early
+  ansible.builtin.debug:
+    msg: User {{ lookup('ansible.builtin.env', 'username') }} doesn't exist in the OpenVPN Access Server instance. Exiting
+  when: delete_vpn_user_user_exists_result.stdout == "{}"
+
+- name: User doesn't exist, exit role
+  ansible.builtin.meta: end_role
+  when: delete_vpn_user_user_exists_result.stdout == "{}"
+
+- name: Revoke user certificates
+  community.docker.docker_container_exec:
+    container: "{{ delete_vpn_user_container }}"
+    command: /usr/local/openvpn_as/scripts/sacli --user {{ lookup('ansible.builtin.env', 'username') }} RevokeUser
+
+- name: Delete user
+  community.docker.docker_container_exec:
+    container: "{{ delete_vpn_user_container }}"
+    command: /usr/local/openvpn_as/scripts/sacli --user {{ lookup('ansible.builtin.env', 'username') }} UserPropDelAll

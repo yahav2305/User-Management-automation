@@ -1,0 +1,28 @@
+- name: Check if user already exists
+  community.docker.docker_container_exec:
+    container: "{{ delete_dot1x_user_container }}"
+    command: |
+      /opt/keyfactor/bin/ejbca.sh ra findendentity --username {{ lookup('ansible.builtin.env', 'username') }}
+  register: delete_dot1x_user_user_exists_result
+  failed_when: delete_dot1x_user_user_exists_result.rc not in [0, 1]
+
+- name: Print that user doesn't and that role is ending early
+  ansible.builtin.debug:
+    msg: User {{ lookup('ansible.builtin.env', 'username') }} doesn't exist in the EJBCA .1X instance. Exiting
+  when: delete_dot1x_user_user_exists_result.rc == 1
+
+- name: User doesn't exist, exit role
+  ansible.builtin.meta: end_role
+  when: delete_dot1x_user_user_exists_result.rc == 1
+
+- name: Revoke end entity and its certificates
+  community.docker.docker_container_exec:
+    container: "{{ delete_dot1x_user_container }}"
+    command: |
+      /opt/keyfactor/bin/ejbca.sh ra revokeendentity --username {{ lookup('ansible.builtin.env', 'username') }} -r 5
+
+- name: Delete end entity
+  community.docker.docker_container_exec:
+    container: "{{ delete_dot1x_user_container }}"
+    command: |
+      /opt/keyfactor/bin/ejbca.sh ra delendentity -force --username {{ lookup('ansible.builtin.env', 'username') }}

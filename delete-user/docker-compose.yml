@@ -1,0 +1,9 @@
+services:
+  ansible:
+    image: ghcr.io/ansible/community-ansible-dev-tools:v25.12.0
+    container_name: ansible-runner
+    volumes:
+      - ./ansible:/workdir:rw
+    env_file:
+      - params.env
+    entrypoint: ["bash", "/workdir/entrypoint.sh"]

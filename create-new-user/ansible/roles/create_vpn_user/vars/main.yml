@@ -1,0 +1,3 @@
+create_vpn_user_container: openvpn-as
+create_vpn_user_group_name: Users
+create_vpn_user_remote_save_folder: "/tmp/openvpn_ovpn_files"

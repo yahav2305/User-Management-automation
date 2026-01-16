@@ -1,0 +1,74 @@
+- name: Check if user already exists
+  community.docker.docker_container_exec:
+    container: "{{ create_dot1x_user_container }}"
+    command: |
+      /opt/keyfactor/bin/ejbca.sh ra findendentity --username {{ lookup('ansible.builtin.env', 'username') }}
+  register: create_dot1x_user_user_exists_result
+  failed_when: create_dot1x_user_user_exists_result.rc not in [0, 1]
+
+- name: Create file to notify that user already exists
+  ansible.builtin.file:
+    path: "./dot1x_certs/already-exists.p12"
+    state: touch
+    mode: '644'
+  when: create_dot1x_user_user_exists_result.rc == 0
+  delegate_to: localhost
+
+- name: Print that user already exists and that role is ending early
+  ansible.builtin.debug:
+    msg: User {{ lookup('ansible.builtin.env', 'username') }} already exists in the EJBCA .1X instance. Exiting
+  when: create_dot1x_user_user_exists_result.rc == 0
+
+- name: User already exists, exit role
+  ansible.builtin.meta: end_role
+  when: create_dot1x_user_user_exists_result.rc == 0
+
+- name: Create remote save folder
+  ansible.builtin.file:
+    path: "{{ create_dot1x_user_remote_save_folder }}"
+    state: directory
+    mode: '640'
+
+- name: Create user end entity
+  community.docker.docker_container_exec:
+    container: "{{ create_dot1x_user_container }}"
+    command: |
+      /opt/keyfactor/bin/ejbca.sh ra addendentity
+       --username {{ lookup('ansible.builtin.env', 'username') }}
+        --password "{{ create_dot1x_user_password }}"
+         --dn "CN={{ lookup('ansible.builtin.env', 'username') }}"
+          --caname SubCA --type 1 --token P12
+
+- name: Enable batch processing for the user
+  community.docker.docker_container_exec:
+    container: "{{ create_dot1x_user_container }}"
+    command: /opt/keyfactor/bin/ejbca.sh ra setclearpwd {{ lookup('ansible.builtin.env', 'username') }} "{{ create_dot1x_user_password }}"
+
+- name: Generate user certificate
+  community.docker.docker_container_exec:
+    container: "{{ create_dot1x_user_container }}"
+    command: /opt/keyfactor/bin/ejbca.sh batch {{ lookup('ansible.builtin.env', 'username') }} --keyalg RSA --keyspec 4096
+
+- name: Copy certificate from docker to remote host
+  ansible.builtin.command:
+    cmd: |
+      docker cp
+       "{{ create_dot1x_user_container }}":/opt/keyfactor/p12/{{ lookup('ansible.builtin.env', 'username') }}.p12
+        "{{ create_dot1x_user_remote_save_folder }}"/{{ lookup('ansible.builtin.env', 'username') }}.p12
+    creates: "{{ create_dot1x_user_remote_save_folder }}/{{ lookup('ansible.builtin.env', 'username') }}.p12"
+
+- name: Fetch certificate file to local
+  ansible.builtin.fetch:
+    src: "{{ create_dot1x_user_remote_save_folder }}/{{ lookup('ansible.builtin.env', 'username') }}.p12"
+    dest: "./dot1x_certs/{{ lookup('ansible.builtin.env', 'username') }}.p12"
+    flat: true
+
+- name: Delete the certificate on remote host
+  ansible.builtin.file:
+    path: "{{ create_dot1x_user_remote_save_folder }}/{{ lookup('ansible.builtin.env', 'username') }}.p12"
+    state: absent
+
+- name: Delete the certificate on docker
+  community.docker.docker_container_exec:
+    container: "{{ create_dot1x_user_container }}"
+    command: rm /opt/keyfactor/p12/{{ lookup('ansible.builtin.env', 'username') }}.p12

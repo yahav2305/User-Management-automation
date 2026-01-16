@@ -1,0 +1,20 @@
+- name: Check if user already exists
+  microsoft.ad.object_info:
+    identity: "CN={{ lookup('ansible.builtin.env', 'username') }},OU=Users,DC=network,DC=internal"
+  register: delete_ad_user_user_exists_result
+
+- name: Print that user doesn't exist and that role is ending early
+  ansible.builtin.debug:
+    msg: User {{ lookup('ansible.builtin.env', 'username') }} doesn't exist in the Active Directory instance. Exiting
+  when: delete_ad_user_user_exists_result.objects | length == 0
+
+- name: User already doesn't exist, exit role
+  ansible.builtin.meta: end_role
+  when: delete_ad_user_user_exists_result.objects | length == 0
+
+- name: Delete user
+  microsoft.ad.user:
+    name: "{{ lookup('ansible.builtin.env', 'username') }}"
+    upn: "{{ lookup('ansible.builtin.env', 'username') }}@network.internal"
+    state: absent
+    path: "OU=Users,DC=network,DC=internal"

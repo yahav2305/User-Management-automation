@@ -1,0 +1,4 @@
+create_dot1x_user_container: ejbca
+create_dot1x_user_password: "123456"
+create_dot1x_user_group_name: Users
+create_dot1x_user_remote_save_folder: "/tmp/dot1x_cert_files"

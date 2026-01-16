@@ -1,0 +1,97 @@
+- name: Check if user already exists
+  community.docker.docker_container_exec:
+    container: "{{ create_vpn_user_container }}"
+    command: |
+      /usr/local/openvpn_as/scripts/sacli --pfilt {{ lookup('ansible.builtin.env', 'username') }} UserPropGet
+  register: create_vpn_user_user_exists_result
+
+- name: Create file to notify that user already exists
+  ansible.builtin.file:
+    path: "./vpn_profiles/already-exists.ovpn"
+    state: touch
+    mode: '644'
+  when: create_vpn_user_user_exists_result.stdout != "{}"
+  delegate_to: localhost
+
+- name: Print that user already exists and that role is ending early
+  ansible.builtin.debug:
+    msg: User {{ lookup('ansible.builtin.env', 'username') }} already exists in the OpenVPN Access Server instance. Exiting
+  when: create_vpn_user_user_exists_result.stdout != "{}"
+
+- name: User already exists, exit role
+  ansible.builtin.meta: end_role
+  when: create_vpn_user_user_exists_result.stdout != "{}"
+
+- name: Create remote save folder
+  ansible.builtin.file:
+    path: "{{ create_vpn_user_remote_save_folder }}"
+    state: directory
+    mode: '640'
+
+- name: Generate random password
+  ansible.builtin.set_fact:
+    create_vpn_user_password: "{{ lookup('password', '/dev/null length=12 chars=ascli_letters,digits') }}"
+
+- name: Add a line to a file
+  ansible.builtin.lineinfile:
+    path: "{{ create_vpn_user_remote_save_folder }}/pass.txt"
+    line: "Username: {{ lookup('ansible.builtin.env', 'username') }} Password: {{ create_vpn_user_password }}\n"
+    state: present
+    create: true
+    mode: '640'
+
+- name: Create user
+  community.docker.docker_container_exec:
+    container: "{{ create_vpn_user_container }}"
+    command: /usr/local/openvpn_as/scripts/sacli --user {{ lookup('ansible.builtin.env', 'username') }} --key "type" --value "user_connect" UserPropPut
+
+- name: Set user password
+  community.docker.docker_container_exec:
+    container: "{{ create_vpn_user_container }}"
+    command: |
+      /usr/local/openvpn_as/scripts/sacli
+       --user {{ lookup('ansible.builtin.env', 'username') }}
+        --new_pass={{ create_vpn_user_password }}
+         SetLocalPassword
+
+- name: Assign user to group
+  community.docker.docker_container_exec:
+    container: "{{ create_vpn_user_container }}"
+    command: |
+      /usr/local/openvpn_as/scripts/sacli
+       --user {{ lookup('ansible.builtin.env', 'username') }}
+        --key conn_group --value {{ create_vpn_user_group_name }} UserPropPut
+
+- name: Apply user configuration
+  community.docker.docker_container_exec:
+    container: "{{ create_vpn_user_container }}"
+    command: /usr/local/openvpn_as/scripts/sacli start
+
+- name: Get .ovpn file content
+  community.docker.docker_container_exec:
+    container: "{{ create_vpn_user_container }}"
+    command: /usr/local/openvpn_as/scripts/sacli --user {{ lookup('ansible.builtin.env', 'username') }} GetUserlogin
+  register: create_vpn_user_ovpn_content
+
+- name: Save .ovpn file on remote
+  ansible.builtin.copy:
+    content: "{{ create_vpn_user_ovpn_content.stdout }}"
+    dest: "{{ create_vpn_user_remote_save_folder }}/{{ lookup('ansible.builtin.env', 'username') }}.ovpn"
+    mode: '640'
+
+- name: Fetch .ovpn files to local
+  ansible.builtin.fetch:
+    src: "{{ create_vpn_user_remote_save_folder }}/{{ lookup('ansible.builtin.env', 'username') }}.ovpn"
+    dest: "./vpn_profiles/{{ lookup('ansible.builtin.env', 'username') }}.ovpn"
+    flat: true
+
+- name: Fetch .txt files to local
+  ansible.builtin.fetch:
+    src: "{{ create_vpn_user_remote_save_folder }}/pass.txt"
+    dest: "./vpn_profiles/pass.txt"
+    flat: true
+
+- name: Delete a specific file
+  ansible.builtin.file:
+    path: "{{ create_vpn_user_remote_save_folder }}/pass.txt"
+    state: absent
